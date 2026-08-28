@@ -55,8 +55,11 @@ async function bootstrap() {
   });
 
   app.enableCors({
-    origin: '*',
+    origin: (origin, callback) => {
+      callback(null, true);
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Authorization,Accept',
     credentials: true,
   });
 

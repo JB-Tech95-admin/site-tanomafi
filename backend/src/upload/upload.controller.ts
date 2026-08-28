@@ -4,11 +4,13 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { Request } from 'express';
 
 // Ensure uploads folder exists
 const uploadDir = './uploads';
@@ -45,11 +47,14 @@ export class UploadController {
       },
     }),
   )
-  uploadFile(@UploadedFile() file: any) {
+  uploadFile(@UploadedFile() file: any, @Req() req: Request) {
     if (!file) {
       throw new BadRequestException('Tsy nisy sary voafidy (Aucun fichier sélectionné)');
     }
-    const url = `http://localhost:3001/uploads/${file.filename}`;
+    const host = req.get('host');
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = process.env.BACKEND_URL || `${protocol}://${host}`;
+    const url = `${baseUrl}/uploads/${file.filename}`;
     return {
       success: true,
       url,
@@ -57,3 +62,4 @@ export class UploadController {
     };
   }
 }
+

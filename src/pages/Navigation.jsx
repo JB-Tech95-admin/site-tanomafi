@@ -50,7 +50,7 @@ const Navigation = ({
                 </button>
               ))}
               <a
-                href="https://tanomafi.vercel.app/"
+                href="https://site-tanomafi.vercel.app/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`flex items-center space-x-1 px-3.5 py-2 rounded-full text-xs font-bold transition-all duration-300 ${
@@ -59,7 +59,7 @@ const Navigation = ({
                     : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"
                 }`}
               >
-                <span>tanomafi.vercel.app</span>
+                <span>site-tanomafi.vercel.app</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
@@ -181,7 +181,7 @@ const Navigation = ({
           ))}
 
           <a
-            href="https://tanomafi.vercel.app/"
+            href="https://site-tanomafi.vercel.app/"
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setIsMenuOpen(false)}
@@ -189,7 +189,7 @@ const Navigation = ({
               darkMode ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-blue-50"
             }`}
           >
-            <span>tanomafi.vercel.app</span>
+            <span>site-tanomafi.vercel.app</span>
             <ExternalLink className="w-4 h-4 text-blue-500" />
           </a>
 

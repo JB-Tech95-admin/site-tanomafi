@@ -29,6 +29,9 @@ import { UploadModule } from './upload/upload.module';
             synchronize: true,
             autoLoadEntities: true,
             ssl: { rejectUnauthorized: false },
+            extra: {
+              ssl: { rejectUnauthorized: false },
+            },
             retryAttempts: 10,
             retryDelay: 3000,
           };
