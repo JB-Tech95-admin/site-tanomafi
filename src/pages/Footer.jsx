@@ -3,7 +3,7 @@ const Footer = () => (
     <div className="max-w-7xl mx-auto text-center">
       <div className="flex items-center justify-center space-x-3 mb-6">
         <div className="p-2 rounded-xl">
-          <img src="/logos.png" alt="logo" className="w-15 h-15" />
+          <img src="/image/logos.png" alt="logo" className="w-15 h-15" />
         </div>
         <span className="text-2xl font-bold">Tanomafi</span>
       </div>

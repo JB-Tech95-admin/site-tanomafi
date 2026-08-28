@@ -3,7 +3,6 @@ import "leaflet/dist/leaflet.css";
 import 'leaflet-routing-machine';
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
 
-import MouseCoordinates from "./components/carteComponents/MouseCoordinates";
 import Navigation from "./pages/Navigation";
 import Footer from "./pages/Footer";
 import Dashboard from "./pages/Dashboard";
@@ -15,7 +14,10 @@ import GallerySection from "./components/GallerySection";
 import HeroSection from "./components/HeroSection";
 import ImpactSection from "./components/ImpactSection";
 import MapSection from "./components/MapSection";
+import MembersSection from "./components/MembersSection";
 import Notification from "./components/Notification";
+import { apiService } from "./services/api";
+import { Lock, UserCheck } from "lucide-react";
 
 import './leaflet-setup';
 
@@ -25,7 +27,7 @@ const App = () => {
   const [activeSection, setActiveSection] = useState("accueil");
   const [isScrolled, setIsScrolled] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [counters, setCounters] = useState({ audio: 0, clips: 0, awards: 0, members: 0 });
+  const [counters, setCounters] = useState({ audio: 24, clips: 24, awards: 3, members: 4 });
   const [darkMode, setDarkMode] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -41,12 +43,12 @@ const App = () => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
 
-      const sections = ["accueil", "actions", "galerie", "impact", "saritany", "contact"];
+      const sections = ["accueil", "actions", "mpikambana", "galerie", "impact", "saritany", "contact"];
       const current = sections.find((section) => {
         const element = document.getElementById(section);
         if (element) {
           const rect = element.getBoundingClientRect();
-          return rect.top <= 100 && rect.bottom >= 100;
+          return rect.top <= 120 && rect.bottom >= 100;
         }
         return false;
       });
@@ -58,39 +60,26 @@ const App = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Fetch dashboard stats
   useEffect(() => {
-    const targets = { audio: 24, clips: 24, awards: 3, members: 50 };
-    const duration = 2000;
-    const steps = 60;
-    const increment = duration / steps;
-
-    const timer = setInterval(() => {
-      setCounters((prev) => {
-        const newCounters = {};
-        let allComplete = true;
-
-        Object.keys(targets).forEach((key) => {
-          if (prev[key] < targets[key]) {
-            newCounters[key] = Math.min(prev[key] + Math.ceil(targets[key] / steps), targets[key]);
-            allComplete = false;
-          } else {
-            newCounters[key] = targets[key];
-          }
-        });
-
-        if (allComplete) clearInterval(timer);
-        return newCounters;
-      });
-    }, increment);
-
-    return () => clearInterval(timer);
+    const loadStats = async () => {
+      try {
+        const stats = await apiService.getDashboardStats();
+        if (stats?.counters) {
+          setCounters(stats.counters);
+        }
+      } catch (err) {}
+    };
+    loadStats();
   }, []);
 
   useEffect(() => {
     const root = document.documentElement;
     if (darkMode) {
+      root.classList.add("dark");
       root.style.setProperty("color-scheme", "dark");
     } else {
+      root.classList.remove("dark");
       root.style.setProperty("color-scheme", "light");
     }
   }, [darkMode]);
@@ -109,38 +98,58 @@ const App = () => {
     setIsMenuOpen(false);
   };
 
-  const handleAuth = () => {
-    if (authMode === "login") {
-      if (formData.email === "admin@tanomafi.mg" && formData.password === "admin123") {
-        setIsAuthenticated(true);
-        setUserRole("admin");
-        setUser({ name: "Admin Tanomafi", email: "admin@tanomafi.mg" });
-        setShowAuthModal(false);
-        setCurrentView("dashboard");
-        setNotification({ type: "success", message: "Fidirany Admin totosa !" });
-      } else if (formData.email && formData.password) {
-        setIsAuthenticated(true);
-        setUserRole("user");
-        setUser({ name: formData.name || "Utilisateur", email: formData.email });
-        setShowAuthModal(false);
-        setCurrentView("home");
-        setNotification({ type: "success", message: "Fidirana totosa !" });
-      } else {
-        setNotification({ type: "error", message: "mailaka na teny miafina diso !" });
-      }
-    } else {
-      if (formData.name && formData.email && formData.password) {
-        setIsAuthenticated(true);
-        setUserRole("user");
-        setUser({ name: formData.name, email: formData.email });
-        setShowAuthModal(false);
-        setCurrentView("home");
-        setNotification({ type: "success", message: "Famoronana totosa !" });
-      } else {
-        setNotification({ type: "error", message: "Azafady fenoy ny mombamomba !" });
-      }
+  const handleAuth = async () => {
+    const emailInput = formData.email.trim().toLowerCase();
+
+    // STRICT CHECK: Email extension @tanomafi.mg
+    if (!emailInput.endsWith("@tanomafi.mg")) {
+      setNotification({
+        type: "error",
+        message: "Ny mailaka dia tsy maintsy mifarana amin'ny @tanomafi.mg (Ex: anarana@tanomafi.mg) !",
+      });
+      setTimeout(() => setNotification(null), 5000);
+      return;
     }
-    setTimeout(() => setNotification(null), 3000);
+
+    try {
+      if (authMode === "login") {
+        const res = await apiService.login(emailInput, formData.password);
+        if (res?.token) {
+          localStorage.setItem('tanomafi_token', res.token);
+        }
+
+        setIsAuthenticated(true);
+        setUserRole(res.user.role || "user");
+        setUser(res.user);
+        setShowAuthModal(false);
+
+        if (res.user.role === "admin") {
+          setCurrentView("dashboard");
+          setNotification({ type: "success", message: "Fidirana Admin totosa ! Tongasoa amin'ny Espace Admin." });
+        } else {
+          setCurrentView("home");
+          setNotification({ type: "success", message: `Tongasoa ${res.user.name} ! Azonao jerena izao ny Saritany.` });
+        }
+      } else {
+        const res = await apiService.register(formData.name, emailInput, formData.password);
+        if (res?.token) {
+          localStorage.setItem('tanomafi_token', res.token);
+        }
+
+        setIsAuthenticated(true);
+        setUserRole("user");
+        setUser(res.user);
+        setShowAuthModal(false);
+        setCurrentView("home");
+        setNotification({ type: "success", message: "Famoronana kaonty totosa ! Tongasoa mpikambana vaovao." });
+      }
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message: err.message || "Mailaka na teny miafina diso ! Manandrama indray.",
+      });
+    }
+    setTimeout(() => setNotification(null), 5000);
   };
 
   const handleLogout = () => {
@@ -149,6 +158,7 @@ const App = () => {
     setUser(null);
     setCurrentView("home");
     setShowProfileMenu(false);
+    localStorage.removeItem('tanomafi_token');
     setFormData({ name: "", email: "", password: "" });
     setNotification({ type: "success", message: "Fivoahana totosa !" });
     setTimeout(() => setNotification(null), 3000);
@@ -156,7 +166,7 @@ const App = () => {
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${
-      darkMode ? "bg-gray-900" : "bg-gradient-to-br from-slate-50 to-blue-50"
+      darkMode ? "bg-gray-900 text-white" : "bg-gradient-to-br from-slate-50 to-blue-50 text-gray-800"
     }`}>
       <Navigation
         isScrolled={isScrolled}
@@ -193,41 +203,57 @@ const App = () => {
       )}
 
       {currentView === "dashboard" && userRole === "admin" ? (
-        <Dashboard darkMode={darkMode} counters={counters} user={user} />
+        <Dashboard darkMode={darkMode} user={user} />
       ) : (
-        <>
+        <main className="w-full">
           <HeroSection darkMode={darkMode} scrollToSection={scrollToSection} />
           <ActionsSection darkMode={darkMode} />
-          <GallerySection darkMode={darkMode} isAuthenticated={isAuthenticated} />
-          <ImpactSection darkMode={darkMode} counters={counters} isAuthenticated={isAuthenticated} />
-          <MapSection darkMode={darkMode} isAuthenticated={isAuthenticated} />
+          <MembersSection darkMode={darkMode} />
+          <GallerySection darkMode={darkMode} />
+          <ImpactSection darkMode={darkMode} counters={counters} />
+
+          {/* MAP SECTION: Visible ONLY IF Authenticated (Client or Admin) */}
+          {isAuthenticated ? (
+            <MapSection darkMode={darkMode} />
+          ) : (
+            <section id="saritany" className={`py-20 px-4 transition-colors duration-300 ${
+              darkMode ? "bg-gray-900" : "bg-gradient-to-br from-slate-900 to-blue-950 text-white"
+            }`}>
+              <div className="max-w-4xl mx-auto text-center p-10 bg-white/5 backdrop-blur-lg rounded-3xl border border-white/10 shadow-2xl">
+                <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-blue-500 to-blue-700 rounded-3xl flex items-center justify-center shadow-xl">
+                  <Lock className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-4">
+                  Saritany sy Kajy Lalan-kalana (Carte & Itinéraire)
+                </h2>
+                <p className="text-gray-300 text-base md:text-lg mb-8 max-w-2xl mx-auto leading-relaxed">
+                  Mila kaonty amin'ny mailaka <strong className="text-blue-400">@tanomafi.mg</strong> ianao raha te hijery ny saritany mifandray amin'ny Fiangonana sy mikajy ny halavirana.
+                </p>
+                <div className="flex flex-wrap justify-center gap-4">
+                  <button
+                    onClick={() => { setShowAuthModal(true); setAuthMode("register"); }}
+                    className="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 text-white font-bold rounded-full text-base shadow-xl transform hover:scale-105 transition-all flex items-center space-x-2 cursor-pointer"
+                  >
+                    <UserCheck className="w-5 h-5" />
+                    <span>Hamorona Kaonty (@tanomafi.mg)</span>
+                  </button>
+                  <button
+                    onClick={() => { setShowAuthModal(true); setAuthMode("login"); }}
+                    className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white font-bold rounded-full text-base border border-white/20 transition-all cursor-pointer"
+                  >
+                    <span>Hiditra amin'ny kaonty</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
           <ContactSection darkMode={darkMode} setNotification={setNotification} />
           <Footer />
-        </>
+        </main>
       )}
 
       <Notification notification={notification} />
-
-      <style jsx>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-20px) rotate(180deg); }
-        }
-        @keyframes fade-in-up {
-          from { opacity: 0; transform: translateY(30px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slide-in {
-          from { transform: translateX(400px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        .animate-float { animation: float 6s ease-in-out infinite; }
-        .animate-fade-in-up { animation: fade-in-up 0.8s ease-out forwards; opacity: 0; }
-        .animate-slide-in { animation: slide-in 0.5s ease-out; }
-        .animation-delay-200 { animation-delay: 200ms; }
-        .animation-delay-400 { animation-delay: 400ms; }
-        .animate-fade-in { animation: fade-in-up 0.3s ease-out; }
-      `}</style>
     </div>
   );
 };

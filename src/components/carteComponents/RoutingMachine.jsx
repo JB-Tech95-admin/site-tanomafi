@@ -1,103 +1,109 @@
-// RoutingMachine.jsx - VERSION FINALE POUR VITE
-import { useEffect, useRef, useCallback } from "react";
+// RoutingMachine.jsx - Guaranteed Route Calculation & Drawing
+import { useEffect, useRef } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 
-// Imports pour Vite
-import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
-import "leaflet-routing-machine";
+// Haversine formula for fallback distance
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // in meters
+}
 
 function RoutingMachine({ start, end, onSummaryReady }) {
   const map = useMap();
-  const controlRef = useRef(null);
-  const lastRouteRef = useRef(null);
-
-  const handleRouteFound = useCallback((e) => {
-    const route = e.routes[0];
-    if (!route || !onSummaryReady) return;
-
-    const routeKey = `${start[0]},${start[1]}-${end[0]},${end[1]}`;
-    
-    if (lastRouteRef.current === routeKey) return;
-    lastRouteRef.current = routeKey;
-
-    onSummaryReady({
-      distance: route.summary.totalDistance,
-      duration: route.summary.totalTime,
-      instructions: route.instructions.map(ins => ({
-        text: ins.text,
-        distance: ins.distance || 0,
-        time: ins.time || 0
-      })),
-      start,
-      end,
-      date: new Date().toISOString(),
-      routeKey
-    });
-  }, [start, end, onSummaryReady]);
+  const polylineRef = useRef(null);
 
   useEffect(() => {
     if (!start || !end) return;
 
-    // Vérifie que L.Routing est disponible
-    if (!L.Routing || typeof L.Routing.control !== 'function') {
-      console.error('❌ L.Routing.control non disponible');
-      console.log('Assurez-vous d\'avoir installé: npm install leaflet-routing-machine');
-      return;
+    let isMounted = true;
+
+    // Clean previous route line
+    if (polylineRef.current) {
+      map.removeLayer(polylineRef.current);
+      polylineRef.current = null;
     }
 
-    // Supprime l'ancien contrôle
-    if (controlRef.current) {
+    const startLat = start[0];
+    const startLng = start[1];
+    const endLat = end[0];
+    const endLng = end[1];
+
+    const fetchRoute = async () => {
+      let routeCoords = [
+        [startLat, startLng],
+        [endLat, endLng],
+      ];
+      let distanceMeters = haversineDistance(startLat, startLng, endLat, endLng) * 1.25; // 1.25 factor for road winding
+      let durationSeconds = (distanceMeters / 1000) * 120; // ~30km/h average driving/walking speed
+
       try {
-        map.removeControl(controlRef.current);
-      } catch (err) {
-        console.warn("Erreur suppression:", err);
-      }
-    }
-
-    try {
-      const control = L.Routing.control({
-        waypoints: [
-          L.latLng(start[0], start[1]), 
-          L.latLng(end[0], end[1])
-        ],
-        lineOptions: { 
-          styles: [{ 
-            color: "#1e40af", 
-            weight: 5, 
-            opacity: 0.8 
-          }]
-        },
-        show: false,
-        addWaypoints: false,
-        draggableWaypoints: false,
-        fitSelectedRoutes: true,
-        createMarker: () => null
-      });
-
-      control.on("routesfound", handleRouteFound);
-      control.on("routingerror", (e) => {
-        console.error("Erreur routage:", e.error);
-      });
-      
-      control.addTo(map);
-      controlRef.current = control;
-    } catch (err) {
-      console.error("Erreur création contrôle:", err);
-    }
-
-    return () => {
-      if (controlRef.current) {
-        try {
-          map.removeControl(controlRef.current);
-        } catch (err) {
-          console.warn("Erreur nettoyage:", err);
+        const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.routes && data.routes.length > 0) {
+            const route = data.routes[0];
+            distanceMeters = route.distance;
+            durationSeconds = route.duration;
+            routeCoords = route.geometry.coordinates.map((c) => [c[1], c[0]]);
+          }
         }
-        controlRef.current = null;
+      } catch (err) {
+        console.warn("OSRM routing API fallback active:", err);
+      }
+
+      if (!isMounted) return;
+
+      // Draw thick blue route polyline on Leaflet map
+      const polyline = L.polyline(routeCoords, {
+        color: "#2563eb",
+        weight: 6,
+        opacity: 0.85,
+        lineCap: "round",
+        lineJoin: "round",
+        dashArray: null,
+      }).addTo(map);
+
+      polylineRef.current = polyline;
+
+      // Fit map view to fit the route
+      const bounds = L.latLngBounds(routeCoords);
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+
+      const routeKey = `${startLat.toFixed(4)},${startLng.toFixed(4)}-${endLat.toFixed(4)},${endLng.toFixed(4)}`;
+
+      if (onSummaryReady) {
+        onSummaryReady({
+          distance: distanceMeters,
+          duration: durationSeconds,
+          start,
+          end,
+          date: new Date().toISOString(),
+          routeKey,
+        });
       }
     };
-  }, [start, end, map, handleRouteFound]);
+
+    fetchRoute();
+
+    return () => {
+      isMounted = false;
+      if (polylineRef.current) {
+        map.removeLayer(polylineRef.current);
+        polylineRef.current = null;
+      }
+    };
+  }, [start, end, map, onSummaryReady]);
 
   return null;
 }
