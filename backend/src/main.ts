@@ -6,6 +6,9 @@ import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
 async function ensureDatabaseExists() {
+  if (process.env.DATABASE_URL || process.env.NODE_ENV === 'production') {
+    return;
+  }
   const dbName = process.env.DB_NAME || 'tanomafi';
   const user = process.env.DB_USERNAME || 'postgres';
   const password = process.env.DB_PASSWORD || 'hackermode';
